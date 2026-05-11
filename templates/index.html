@@ -3,91 +3,282 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Speech Therapy App</title>
-    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <title>Speakify</title>
     <style>
-        #record-button {
-            background-color: red;
-            color: white;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
+        :root {
+            color-scheme: light;
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
-        #record-button.recording {
-            background-color: green;
+
+        body {
+            margin: 0;
+            background: #f5f7fb;
+            color: #1f2937;
         }
-        #status {
-            margin-top: 10px;
-            font-size: 1.2em;
+
+        .app {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 24px;
         }
-        #conversation {
+
+        .panel {
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: #ede9fe;
+            color: #6d28d9;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 2rem;
+        }
+
+        p {
+            margin: 0 0 16px;
+            line-height: 1.6;
+        }
+
+        .prompt-card,
+        .result-card {
+            margin-top: 18px;
+            padding: 18px;
+            border-radius: 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .label {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+
+        .prompt {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
             margin-top: 20px;
+        }
+
+        button {
+            border: none;
+            border-radius: 12px;
+            padding: 12px 18px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+        }
+
+        .primary {
+            background: #7c3aed;
+            color: #ffffff;
+        }
+
+        .secondary {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .status {
+            margin-top: 16px;
+            min-height: 24px;
+            font-weight: 600;
+            color: #7c3aed;
+        }
+
+        .score {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0;
+        }
+
+        .transcript {
+            margin-top: 8px;
+            min-height: 24px;
+            font-size: 1rem;
         }
     </style>
 </head>
 <body>
-    <h1>Speech Therapy App</h1>
-    <button id="record-button">Start Recording</button>
-    <div id="status"></div>
-    <div id="conversation"></div>
+    <div class="app">
+        <div class="panel">
+            <div class="badge">Integrated Speakify</div>
+            <h1>Practice speech with confidence</h1>
+            <p>
+                Listen to a phrase, say it aloud, and compare your transcript with the target prompt.
+                Speakify runs in your browser, so microphone support depends on your device and browser.
+            </p>
+
+            <div class="prompt-card">
+                <div class="label">Prompt</div>
+                <p class="prompt" id="prompt-text"></p>
+            </div>
+
+            <div class="controls">
+                <button class="primary" id="listen-button">🔊 Hear prompt</button>
+                <button class="primary" id="record-button">🎙️ Start practice</button>
+                <button class="secondary" id="next-button">➡️ Next prompt</button>
+            </div>
+
+            <div class="status" id="status">Ready when you are.</div>
+
+            <div class="result-card">
+                <div class="label">Results</div>
+                <p class="score" id="score">--</p>
+                <p id="feedback">Press “Start practice” to begin.</p>
+                <div class="transcript" id="transcript"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const socket = io();
-        const recordButton = document.getElementById('record-button');
-        const statusDiv = document.getElementById('status');
-        const conversationDiv = document.getElementById('conversation');
+        const prompts = [
+            "Let us talk clearly together",
+            "I can practice one word at a time",
+            "Slow breathing helps me speak calmly",
+            "My voice matters every single day",
+            "Small steps build confident communication"
+        ];
+
+        const promptText = document.getElementById("prompt-text");
+        const listenButton = document.getElementById("listen-button");
+        const recordButton = document.getElementById("record-button");
+        const nextButton = document.getElementById("next-button");
+        const status = document.getElementById("status");
+        const score = document.getElementById("score");
+        const feedback = document.getElementById("feedback");
+        const transcript = document.getElementById("transcript");
+
+        let promptIndex = 0;
+        let recognition;
         let isRecording = false;
-        let mediaRecorder;
-        let audioChunks = [];
 
-        recordButton.addEventListener('click', () => {
-        if (isRecording) {
-            stopRecording();
-        } else {
-            startRecording();
+        function normalize(text) {
+            return text.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
         }
-    });
 
-     function startRecording() {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.start();
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
-                mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    audioChunks = [];
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const base64AudioMessage = reader.result.split(',')[1];
-                        console.log("Sending audio to server");  // Add this line
-                        socket.emit('audio_message', base64AudioMessage);
-                    };
-                    reader.readAsDataURL(audioBlob);
-                };
+        function renderPrompt() {
+            promptText.textContent = prompts[promptIndex];
+            score.textContent = "--";
+            feedback.textContent = 'Press "Start practice" to begin.';
+            transcript.textContent = "";
+            status.textContent = "Ready when you are.";
+        }
+
+        function speakPrompt() {
+            const utterance = new SpeechSynthesisUtterance(prompts[promptIndex]);
+            utterance.rate = 0.9;
+            utterance.pitch = 1;
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+            status.textContent = "Playing the prompt aloud.";
+        }
+
+        function evaluateTranscript(resultText) {
+            const targetWords = normalize(prompts[promptIndex]).split(/\s+/).filter(Boolean);
+            const spokenWords = normalize(resultText).split(/\s+/).filter(Boolean);
+
+            const matches = targetWords.filter((word, index) => spokenWords[index] === word).length;
+            const accuracy = targetWords.length ? Math.round((matches / targetWords.length) * 100) : 0;
+
+            score.textContent = `${accuracy}% match`;
+            transcript.textContent = `Transcript: ${resultText}`;
+
+            if (accuracy >= 80) {
+                feedback.textContent = "Great job. Your spoken phrase was very close to the prompt.";
+            } else if (accuracy >= 50) {
+                feedback.textContent = "Nice work. Try once more and focus on pacing each word.";
+            } else {
+                feedback.textContent = "Keep going. Listen again and try repeating the phrase more slowly.";
+            }
+        }
+
+        function setupRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                recordButton.disabled = true;
+                status.textContent = "Speech recognition is not supported in this browser.";
+                feedback.textContent = "Try Chrome or another browser with Web Speech support.";
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = "en-US";
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
                 isRecording = true;
-                recordButton.textContent = 'Stop Recording';
-                recordButton.classList.add('recording');
-                statusDiv.textContent = 'Recording...';
-            });
-    }
+                recordButton.textContent = "⏹️ Stop practice";
+                status.textContent = "Listening...";
+            };
 
-    function stopRecording() {
-        mediaRecorder.stop();
-        isRecording = false;
-        recordButton.textContent = 'Start Recording';
-        recordButton.classList.remove('recording');
-        statusDiv.textContent = '';
-    }
+            recognition.onresult = (event) => {
+                const resultText = event.results[0][0].transcript;
+                evaluateTranscript(resultText);
+                status.textContent = "Practice recorded.";
+            };
 
-    socket.on('response', response => {
-        const messageDiv = document.createElement('div');
-        messageDiv.textContent = `Bot: ${response}`;
-        conversationDiv.appendChild(messageDiv);
-    });
-</script>
+            recognition.onerror = (event) => {
+                status.textContent = `Speech recognition error: ${event.error}`;
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                recordButton.textContent = "🎙️ Start practice";
+            };
+        }
+
+        listenButton.addEventListener("click", speakPrompt);
+
+        recordButton.addEventListener("click", () => {
+            if (!recognition) {
+                return;
+            }
+
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                transcript.textContent = "";
+                recognition.start();
+            }
+        });
+
+        nextButton.addEventListener("click", () => {
+            promptIndex = (promptIndex + 1) % prompts.length;
+            renderPrompt();
+        });
+
+        renderPrompt();
+        setupRecognition();
+    </script>
 </body>
 </html>
