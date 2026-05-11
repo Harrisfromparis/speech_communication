@@ -12,9 +12,9 @@ Let's Talk is a Streamlit app focused on speech communication support. It combin
 
 ## Project Structure
 
-- `/home/runner/work/speech_communication/speech_communication/app.py` - main Streamlit application
-- `/home/runner/work/speech_communication/speech_communication/templates/index.html` - embedded Speakify voice-practice experience
-- `/home/runner/work/speech_communication/speech_communication/pdf.pdf` - document used by the chatbot retrieval flow
+- `app.py` - main Streamlit application
+- `templates/index.html` - embedded Speakify voice-practice experience
+- `pdf.pdf` - document used by the chatbot retrieval flow
 
 ## Installation
 
